@@ -58,11 +58,11 @@ EXAMPLES:
 }
 
 struct CliArgs {
-    std::string command;      // build, clean, run, help
-    std::string run;          // run command
-    std::string target = "";  // --target
-    std::string profile = ""; // --profile
-    bool verbose = false;     // --verbose o -v
+    std::string command;
+    std::string run;
+    std::string target = "";
+    std::string profile = "";
+    bool verbose = false;
 };
 
 CliArgs parse_args(int argc, char *argv[]) {
@@ -98,8 +98,6 @@ CliArgs parse_args(int argc, char *argv[]) {
 int main(int argc, char *argv[]) {
 
     CliArgs args = parse_args(argc, argv);
-
-    // Leer archivo
     std::ifstream file("kas_package.json");
 
     if (!file.is_open()) {
@@ -130,7 +128,6 @@ int main(int argc, char *argv[]) {
         return 0;
     }
     if (args.command == "clean") {
-        // Aquí iría la lógica para limpiar los artefactos de compilación
         KasLog::log(KasLog::Level::INFO, "Clean successful!");
         return 0;
     }

@@ -25,6 +25,6 @@ namespace KasRun {
         }
         return res;
     }
-} // namespace KasRun
+}
 
-#endif // KASRUN_HPP
+#endif

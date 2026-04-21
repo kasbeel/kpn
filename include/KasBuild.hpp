@@ -34,8 +34,6 @@ namespace KasBuild {
         }
     };
     bool check_system_dependency(const std::string &lib_name) {
-        // Construimos el comando: pkg-config --exists lib || exit 1
-        // Usamos redirección a /dev/null para que no ensucie la terminal
         std::string command = "pkg-config --exists " + lib_name + " 2>/dev/null";
 
         int result = std::system(command.c_str());
@@ -43,8 +41,8 @@ namespace KasBuild {
         if (result == 0) {
             return true;
         } else {
-            KasLog::log(KasLog::Level::ERR, "Falta la librería del sistema: %s", lib_name.c_str());
-            KasLog::log(KasLog::Level::INFO, "Sugerencia: sudo apt install lib%s", (lib_name + "-dev").c_str());
+            KasLog::log(KasLog::Level::ERR, "Missing system library: %s", lib_name.c_str());
+            KasLog::log(KasLog::Level::INFO, "Suggestion: sudo apt install lib%s", (lib_name + "-dev").c_str());
             return false;
         }
     }
@@ -61,7 +59,6 @@ namespace KasBuild {
             result.pop_back();
         return result;
     }
-    // Función para obtener un target por nombre
     const KasProjectConfig::TargetConfig *find_target(const KasProjectConfig::KasProject &project, const std::string &name) {
         for (const auto &t : project.targets) {
             if (t.name == name)
@@ -70,25 +67,22 @@ namespace KasBuild {
         return nullptr;
     }
 
-    // Función recursiva para resolver el orden (Depth First Search)
     void resolve_order(const std::string &target_name,
                        const KasProjectConfig::KasProject &project,
                        std::vector<std::string> &ordered_list,
                        std::set<std::string> &visited) {
 
         if (visited.count(target_name))
-            return; // Ya lo procesamos
+            return;
 
         const auto *target = find_target(project, target_name);
         if (!target)
-            return; // Error: dependencia no encontrada en el JSON
+            return;
 
-        // Primero resolvemos recursivamente todas sus dependencias
         for (const auto &dep : target->dependencies) {
             resolve_order(dep, project, ordered_list, visited);
         }
 
-        // Una vez procesadas sus dependencias, lo añadimos a la lista
         visited.insert(target_name);
         ordered_list.push_back(target_name);
     }
@@ -209,6 +203,32 @@ namespace KasBuild {
 
         return 0;
     }
+    bool needs_recompile(const std::string& source_p, const std::string& object_p) {
+    if (!std::filesystem::exists(object_p)) return true;
+
+    auto source_time = std::filesystem::last_write_time(source_p);
+    auto object_time = std::filesystem::last_write_time(object_p);
+
+    return source_time > object_time;
+} 
+bool should_build_obj(const std::string& src, const std::string& obj) {
+    // 1. Check directo del .cpp
+    if (needs_recompile(src, obj)) return true;
+
+    // 2. Check de las dependencias (.d)
+    std::string dep_file = replace_extension(obj, ".d");
+    if (std::filesystem::exists(dep_file)) {
+        std::vector<std::string> dependencies = parse_dep_file(dep_file);
+        for (const auto& dep : dependencies) {
+            if (std::filesystem::exists(dep)) {
+                if (std::filesystem::last_write_time(dep) > std::filesystem::last_write_time(obj)) {
+                    return true; // Un .hpp cambió
+                }
+            }
+        }
+    }
+    return false;
+}
     int run_compile_target(const KasProjectConfig::KasProject &project, const KasProjectConfig::TargetConfig &target) {
         bool all_deps_ok = true;
         std::string libs = "";
@@ -238,7 +258,7 @@ namespace KasBuild {
         }
 
         if (!all_deps_ok) {
-            KasLog::log(KasLog::Level::ERR, "Faltan dependencias del sistema. Abortando compilación.");
+            KasLog::log(KasLog::Level::ERR, "Missing system dependencies. Aborting compilation.");
             return 1;
         }
 
@@ -303,22 +323,22 @@ namespace KasBuild {
             if (find_target(project, target_req)) {
                 resolve_order(target_req, project, build_queue, visited);
             } else {
-                KasLog::log(KasLog::Level::ERR, "Target no encontrado: %s", target_req.c_str());
+                KasLog::log(KasLog::Level::ERR, "Target not found: %s", target_req.c_str());
                 return false;
             }
         }
 
         for (const auto &t_name : build_queue) {
             const auto *target = find_target(project, t_name);
-            KasLog::log(KasLog::Level::INFO, "Compilando Target: %s", t_name.c_str());
+            KasLog::log(KasLog::Level::INFO, "Compiling target: %s", t_name.c_str());
 
             if (run_compile_target(project, *target) != 0) {
-                KasLog::log(KasLog::Level::ERR, "Error compilando Target: %s", t_name.c_str());
+                KasLog::log(KasLog::Level::ERR, "Error compiling target: %s", t_name.c_str());
                 return false;
             }
         }
 
         return true;
     }
-} // namespace KasBuild
-#endif // KASBUILD_HPP
+}
+#endif

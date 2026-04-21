@@ -64,14 +64,12 @@ namespace KasProjectConfig {
         std::vector<TargetConfig> targets;
         std::map<std::string, CommandConfig> commands;
     };
-    // Macros de mapeo automático
     NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(WarningsConfig, level, extra, pedantic)
     NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(ToolchainConfig, compiler, standards, warnings, jobs, sysroot, cxxflags, ldflags)
     NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(ProfileConfig, defines, cxxflags, lto, strip)
     NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(TargetConfig, name, type, sources, includes, system_libs, dependencies, output_name, build_dir, output_dir, cxxflags, ldflags)
     NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(CommandConfig, enabled, command)
 
-    // Para KasProject mapeamos manualmente los que tienen nombres anidados o especiales
     void from_json(const json &j, KasProject &p) {
         p.schema_version = j.at("schema_version").get<std::string>();
         p.project_name = j.at("project").get<std::string>();
@@ -99,7 +97,6 @@ namespace KasProjectConfig {
         t.sources = j.at("sources").get<std::vector<std::string>>();
         t.output_name = j.at("output_name").get<std::string>();
 
-        // Estos campos ahora son OPCIONALES:
         t.includes = j.value("includes", std::vector<std::string>{});
         t.system_libs = j.value("system_libs", std::vector<std::string>{});
         t.dependencies = j.value("dependencies", std::vector<std::string>{});
@@ -111,6 +108,6 @@ namespace KasProjectConfig {
         t.cxxflags = j.value("cxxflags", std::vector<std::string>{});
         t.ldflags = j.value("ldflags", std::vector<std::string>{});
     }
-} // namespace KasProjectConfig
+}
 
-#endif // KASPROJECTCONFIG_HPP
+#endif

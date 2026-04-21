@@ -64,6 +64,6 @@ namespace KasLog {
         va_end(args);
         printf("%s[%s]%s %s\n", color, label, reset, message);
     }
-} // namespace KasLog
+}
 
-#endif // KASLOG_HPP
+#endif
