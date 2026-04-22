@@ -1,0 +1,138 @@
+/******************************************************************************
+MIT License
+
+Copyright (c) 2026 Wladimir A. Jiménez B.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+******************************************************************************/
+#include <KasBuild.hpp>
+#include <KasLog.hpp>
+#include <KasProjectConfig.hpp>
+#include <KasRun.hpp>
+#include <fstream>
+#include <iostream>
+
+using namespace KasProjectConfig;
+
+void print_help() {
+    std::cout << R"(
+KasBuildManagment - Simple C++ Build System
+USAGE:
+  kasbm <command> [options]
+
+COMMANDS:
+  build                Build project
+  run <command>        Run a command (ej: calculator)
+  clean                Clean build artifacts
+  help                 Show this help
+
+OPTIONS:
+  -t, --target <name>     Specify target to build
+  -p, --profile <name>    Build profile (debug, release)
+  -v, --verbose           Enable verbose output
+
+EXAMPLES:
+  kasbm build
+  kasbm build -t kas_toolkit
+  kasbm build -p release
+  kasbm run calculator
+  kasbm clean
+
+)";
+}
+
+struct CliArgs {
+    std::string command;      // build, clean, run, help
+    std::string run;          // run command
+    std::string target = "";  // --target
+    std::string profile = ""; // --profile
+    bool verbose = false;     // --verbose o -v
+};
+
+CliArgs parse_args(int argc, char *argv[]) {
+    CliArgs args;
+    int arg_index = 1;
+    if (argc < 2) {
+        print_help();
+        exit(0);
+    }
+
+    args.command = argv[arg_index++];
+
+    if (args.command == "run" && argc >= 3) {
+        args.run = argv[arg_index++];
+    }
+
+    for (int i = arg_index; i < argc; ++i) {
+        std::string arg = argv[i];
+
+        if (arg == "--target" || arg == "-t") {
+            if (i + 1 < argc)
+                args.target = argv[++i];
+        } else if (arg == "--profile" || arg == "-p") {
+            if (i + 1 < argc)
+                args.profile = argv[++i];
+        } else if (arg == "--verbose" || arg == "-v") {
+            args.verbose = true;
+        }
+    }
+    return args;
+}
+
+int main(int argc, char *argv[]) {
+
+    CliArgs args = parse_args(argc, argv);
+
+    // Leer archivo
+    std::ifstream file("kas_package.json");
+
+    if (!file.is_open()) {
+        KasLog::log(KasLog::Level::ERR, "Could not find kas_package.json");
+        exit(1);
+    }
+
+    json j;
+    file >> j;
+
+    KasProject project = j.get<KasProject>();
+
+    KasLog::log(KasLog::Level::INFO, "Project Loaded: %s", project.project_name.c_str());
+
+    if (args.command == "help") {
+        print_help();
+        return 0;
+    }
+    if (args.command == "run") {
+        return KasRun::run_command(project.commands, args.run);
+    }
+    if (args.command == "build") {
+        if (!KasBuild::build_target(project, args.target.empty() ? "all" : args.target)) {
+            KasLog::log(KasLog::Level::ERR, "Build failed.");
+            return 1;
+        }
+        KasLog::log(KasLog::Level::INFO, "Build successful!");
+        return 0;
+    }
+    if (args.command == "clean") {
+        // Aquí iría la lógica para limpiar los artefactos de compilación
+        KasLog::log(KasLog::Level::INFO, "Clean successful!");
+        return 0;
+    }
+    return 0;
+}

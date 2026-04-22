@@ -1,0 +1,95 @@
+{
+    "schema_version": "1.0",
+    "project": "KasUIToolkit",
+    "version": "0.1.0",
+    "description": "C++20 UI toolkit and examples",
+    "license": "MIT",
+    "toolchain": {
+        "compiler": "g++",
+        "standards": {
+            "cxx": "c++20"
+        },
+        "warnings": {
+            "level": "all",
+            "extra": true,
+            "pedantic": false
+        },
+        "jobs": 4,
+        "cxxflags": [],
+        "ldflags": []
+    },
+    "profiles": {
+        "debug": {
+            "defines": [
+                "DEBUG"
+            ],
+            "cxxflags": [
+                "-O0",
+                "-g3",
+                "-fno-omit-frame-pointer"
+            ],
+            "lto": false,
+            "strip": false
+        },
+        "release": {
+            "defines": [
+                "NDEBUG"
+            ],
+            "cxxflags": [
+                "-O3",
+                "-g",
+                "-march=native"
+            ],
+            "lto": true,
+            "strip": true
+        }
+    },
+    "targets": [
+        {
+            "name": "KasUIToolkit",
+            "type": "shared_lib",
+            "sources": [
+                "src/**"
+            ],
+            "includes": [
+                "include"
+            ],
+            "system_libs": [
+                "x11",
+                "x11-xcb",
+                "xcb-xkb",
+                "xkbcommon",
+                "opengl"
+            ],
+            "output_name": "KasUIToolkit",
+            "build_dir": "build",
+            "out_dir": "lib"
+        },
+        {
+            "name": "calculator",
+            "type": "executable",
+            "sources": [
+                "examples/KasCalculator.cpp"
+            ],
+            "includes": [
+                "include"
+            ],
+            "dependencies": [
+                "KasUIToolkit"
+            ],
+            "output_name": "kas_calculator",
+            "build_dir": "build",
+            "out_dir": "bin"
+        }
+    ],
+    "commands": {
+        "calculator": {
+            "enabled": true,
+            "command": "ls -lah"
+        },
+        "clean": {
+            "enabled": true,
+            "command": "rm -rf build/* bin/*"
+        }
+    }
+}
