@@ -40,6 +40,7 @@ namespace KasProjectConfig {
         std::vector<std::string> system_libs;
         std::vector<std::string> dependencies;
         std::string output_name;
+        std::string output_extension;
         std::string build_dir;
         std::string output_dir;
         std::vector<std::string> cxxflags;
@@ -67,7 +68,7 @@ namespace KasProjectConfig {
     NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(WarningsConfig, level, extra, pedantic)
     NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(ToolchainConfig, compiler, standards, warnings, jobs, sysroot, cxxflags, ldflags)
     NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(ProfileConfig, defines, cxxflags, lto, strip)
-    NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(TargetConfig, name, type, sources, includes, system_libs, dependencies, output_name, build_dir, output_dir, cxxflags, ldflags)
+    NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(TargetConfig, name, type, sources, includes, system_libs, dependencies, output_name, output_extension, build_dir, output_dir, cxxflags, ldflags)
     NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(CommandConfig, enabled, command)
 
     void from_json(const json &j, KasProject &p) {
@@ -101,13 +102,19 @@ namespace KasProjectConfig {
         t.system_libs = j.value("system_libs", std::vector<std::string>{});
         t.dependencies = j.value("dependencies", std::vector<std::string>{});
         t.build_dir = j.value("build_dir", std::string{"build"});
-        if (t.type == "executable")
+        if (t.type == "executable") {
             t.output_dir = j.value("output_dir", std::string{"bin"});
-        else if (t.type == "shared_lib")
+            t.output_extension = j.value("output_extension", std::string{});
+        } else if (t.type == "shared_lib") {
             t.output_dir = j.value("output_dir", std::string{"lib"});
+            t.output_extension = j.value("output_extension", std::string{".so"});
+        } else if (t.type == "static_lib") {
+            t.output_dir = j.value("output_dir", std::string{"lib"});
+            t.output_extension = j.value("output_extension", std::string{".a"});
+        }
         t.cxxflags = j.value("cxxflags", std::vector<std::string>{});
         t.ldflags = j.value("ldflags", std::vector<std::string>{});
     }
-}
+} // namespace KasProjectConfig
 
 #endif
