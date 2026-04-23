@@ -35,8 +35,35 @@ namespace KasBuild {
             cv.notify_one();
         }
     };
+
+    void append_spaced(std::string &dst, const std::string &value) {
+        if (!value.empty()) {
+            dst += value;
+            dst += " ";
+        }
+    }
+
+    std::string join_flags(const std::vector<std::string> &flags) {
+        std::string result;
+        for (const auto &flag : flags) {
+            append_spaced(result, flag);
+        }
+        return result;
+    }
+
+    void ensure_flag(std::string &flags, const std::string &flag) {
+        const std::string token = flag + " ";
+        if (flags.find(token) == std::string::npos) {
+            append_spaced(flags, flag);
+        }
+    }
+
+    std::string make_pkg_config_command(const std::string &query, const std::string &libs) {
+        return "pkg-config " + query + " " + libs;
+    }
+
     bool check_system_dependency(const std::string &lib_name) {
-        std::string command = "pkg-config --exists " + lib_name + " 2>/dev/null";
+        const std::string command = "pkg-config --exists " + lib_name + " 2>/dev/null";
 
         int result = std::system(command.c_str());
         KasLog::log(KasLog::Level::DEBUG, "Checking system dependency: %s %s", lib_name.c_str(), (result == 0) ? "[OK]" : "[MISSING]");
@@ -48,6 +75,7 @@ namespace KasBuild {
             return false;
         }
     }
+
     std::string exec_cmd(const char *cmd) {
         char buffer[128];
         std::string result = "";
@@ -61,6 +89,7 @@ namespace KasBuild {
             result.pop_back();
         return result;
     }
+
     const KasProjectConfig::TargetConfig *find_target(const KasProjectConfig::KasProject &project, const std::string &name) {
         for (const auto &t : project.targets) {
             if (t.name == name)
@@ -98,46 +127,45 @@ namespace KasBuild {
         return obj_path.string();
     }
 
+    template <typename Iterator>
+    void collect_matches(Iterator begin, Iterator end, const std::string &target_ext, bool only_dirs, std::vector<std::string> &results) {
+        for (auto it = begin; it != end; ++it) {
+            const auto &entry = *it;
+            if (only_dirs) {
+                if (entry.is_directory()) {
+                    results.push_back(entry.path().string());
+                }
+                continue;
+            }
+
+            if (entry.is_regular_file() && entry.path().extension() == target_ext) {
+                results.push_back(entry.path().string());
+            }
+        }
+    }
+
     std::vector<std::string> resolve_pattern(const std::string &pattern, const std::string &ext, bool only_dirs = false) {
         std::vector<std::string> results;
-        std::string target_ext = "." + ext;
+        const std::string target_ext = "." + ext;
 
         if (pattern.size() > 3 && pattern.substr(pattern.size() - 3) == "/**") {
-            std::string base_dir = pattern.substr(0, pattern.size() - 3);
+            const std::string base_dir = pattern.substr(0, pattern.size() - 3);
             if (!std::filesystem::exists(base_dir))
                 return results;
 
             if (only_dirs)
                 results.push_back(base_dir);
 
-            for (const auto &entry : std::filesystem::recursive_directory_iterator(base_dir)) {
-                if (only_dirs) {
-                    if (entry.is_directory())
-                        results.push_back(entry.path().string());
-                } else {
-                    if (entry.is_regular_file() && entry.path().extension() == target_ext) {
-                        results.push_back(entry.path().string());
-                    }
-                }
-            }
+            collect_matches(std::filesystem::recursive_directory_iterator(base_dir), std::filesystem::recursive_directory_iterator(), target_ext, only_dirs, results);
         } else if (pattern.size() > 2 && pattern.substr(pattern.size() - 2) == "/*") {
-            std::string base_dir = pattern.substr(0, pattern.size() - 2);
+            const std::string base_dir = pattern.substr(0, pattern.size() - 2);
             if (!std::filesystem::exists(base_dir))
                 return results;
 
             if (only_dirs)
                 results.push_back(base_dir);
 
-            for (const auto &entry : std::filesystem::directory_iterator(base_dir)) {
-                if (only_dirs) {
-                    if (entry.is_directory())
-                        results.push_back(entry.path().string());
-                } else {
-                    if (entry.is_regular_file() && entry.path().extension() == target_ext) {
-                        results.push_back(entry.path().string());
-                    }
-                }
-            }
+            collect_matches(std::filesystem::directory_iterator(base_dir), std::filesystem::directory_iterator(), target_ext, only_dirs, results);
         } else {
             if (std::filesystem::exists(pattern)) {
                 if (only_dirs && std::filesystem::is_directory(pattern)) {
@@ -160,9 +188,9 @@ namespace KasBuild {
             std::filesystem::create_directories(parent_dir);
         }
 
-        std::string command = compiler + " -std=" + cpp_std + " -c " + src + " -o " + obj + " " + include_flags + " " + extra_flags;
+        const std::string command = compiler + " -std=" + cpp_std + " -c " + src + " -o " + obj + " " + include_flags + " " + extra_flags;
         KasLog::log(KasLog::Level::DEBUG, "%s", command.c_str());
-        int result = system(command.c_str());
+        const int result = system(command.c_str());
 
         if (result == 0) {
             KasLog::log(KasLog::Level::INFO, "%s build successful!", src.c_str());
@@ -173,6 +201,7 @@ namespace KasBuild {
         }
         return WEXITSTATUS(result);
     }
+
     void update_symlink(const std::filesystem::path &target, const std::filesystem::path &link_name) {
         try {
             if (std::filesystem::exists(link_name) || std::filesystem::is_symlink(link_name)) {
@@ -185,18 +214,15 @@ namespace KasBuild {
             KasLog::log(KasLog::Level::ERR, "No se pudo crear el symlink: %s", e.what());
         }
     }
-    int run_linker(const KasProjectConfig::KasProject &project, const KasProjectConfig::TargetConfig &target, const std::string &objects, const std::string &compiler, const std::string &libs_flags) {
-        std::filesystem::path output_path = std::filesystem::path(target.output_dir) / target.output_name;
 
+    int run_linker(const KasProjectConfig::KasProject &project, const KasProjectConfig::TargetConfig &target, const std::string &objects, const std::string &compiler, const std::string &libs_flags) {
         if (!std::filesystem::exists(target.output_dir)) {
             std::filesystem::create_directories(target.output_dir);
         }
 
         std::string ld_flags = " ";
-        for (const auto &f : project.toolchain.ldflags)
-            ld_flags += f + " ";
-        for (const auto &f : target.ldflags)
-            ld_flags += f + " ";
+        ld_flags += join_flags(project.toolchain.ldflags);
+        ld_flags += join_flags(target.ldflags);
 
         std::string output_name = target.output_name;
         if (target.type == "shared_lib") {
@@ -222,6 +248,7 @@ namespace KasBuild {
 
         return 0;
     }
+
     bool needs_recompile(const std::string &source_p, const std::string &object_p) {
         if (!std::filesystem::exists(object_p))
             return true;
@@ -231,28 +258,62 @@ namespace KasBuild {
 
         return source_time > object_time;
     }
+    void process_line_deps(const std::string &line, std::vector<std::string> &out_deps) {
+        std::istringstream iss(line);
+        std::string dep;
+        while (iss >> dep) {
+            if (dep == "\\" || dep == ":")
+                continue;
+
+            if (dep.find("/usr/") == 0)
+                continue;
+
+            out_deps.push_back(dep);
+        }
+    }
     std::vector<std::string> parse_dep_file(const std::string &dep_file) {
         std::vector<std::string> dependencies;
         std::ifstream file(dep_file);
+
         if (!file.is_open()) {
             KasLog::log(KasLog::Level::ERR, "Failed to open dependency file: %s", dep_file.c_str());
             return dependencies;
         }
 
         std::string line;
+        bool found_main_rule = false;
+
         while (std::getline(file, line)) {
+            if (line.empty())
+                continue;
+
             size_t colon_pos = line.find(':');
-            if (colon_pos != std::string::npos) {
+
+            if (!found_main_rule && colon_pos != std::string::npos) {
                 std::string deps_part = line.substr(colon_pos + 1);
-                std::istringstream iss(deps_part);
-                std::string dep;
-                while (iss >> dep) {
-                    dependencies.push_back(dep);
+                process_line_deps(deps_part, dependencies);
+                found_main_rule = true;
+
+                if (line.find('\\') == std::string::npos) {
+                    break;
+                }
+                continue;
+            }
+
+            if (found_main_rule) {
+                if (colon_pos != std::string::npos && colon_pos == line.find_last_not_of(" \t\n\r\\")) {
+                    break;
+                }
+                process_line_deps(line, dependencies);
+
+                if (line.find('\\') == std::string::npos) {
+                    break;
                 }
             }
         }
         return dependencies;
     }
+
     bool should_build_obj(const std::string &src, const std::string &obj) {
 
         if (needs_recompile(src, obj))
@@ -264,9 +325,11 @@ namespace KasBuild {
 
         if (std::filesystem::exists(dep_file)) {
             std::vector<std::string> dependencies = parse_dep_file(dep_file);
+            const auto obj_time = std::filesystem::last_write_time(obj);
             for (const auto &dep : dependencies) {
                 if (std::filesystem::exists(dep)) {
-                    if (std::filesystem::last_write_time(dep) > std::filesystem::last_write_time(obj)) {
+                    KasLog::log(KasLog::Level::DEBUG, "Checking dependency: %s", dep.c_str());
+                    if (std::filesystem::last_write_time(dep) > obj_time) {
                         return true;
                     }
                 }
@@ -274,6 +337,67 @@ namespace KasBuild {
         }
         return false;
     }
+
+    void append_include_flags(std::string &includes, const std::vector<std::string> &include_dirs) {
+        for (const auto &dir : include_dirs) {
+            append_spaced(includes, "-I" + dir);
+        }
+    }
+
+    std::vector<std::string> gather_sources(const KasProjectConfig::TargetConfig &target) {
+        std::vector<std::string> sources;
+        for (const auto &src_pattern : target.sources) {
+            std::vector<std::string> src_files = resolve_pattern(src_pattern, "cpp");
+            sources.insert(sources.end(), src_files.begin(), src_files.end());
+        }
+        return sources;
+    }
+
+    void resolve_target_dependencies(const KasProjectConfig::KasProject &project,
+                                     const KasProjectConfig::TargetConfig &target,
+                                     std::string &libs,
+                                     std::string &libs_flags,
+                                     bool &all_deps_ok) {
+        for (const auto &lib : target.system_libs) {
+            if (!check_system_dependency(lib)) {
+                all_deps_ok = false;
+            }
+            append_spaced(libs, lib);
+        }
+
+        if (!libs.empty()) {
+            libs_flags = exec_cmd(make_pkg_config_command("--libs", libs).c_str());
+        }
+
+        for (const auto &dep : target.dependencies) {
+            const auto *dep_target = find_target(project, dep);
+            if (!dep_target) {
+                KasLog::log(KasLog::Level::ERR, "Dependency target not found: %s", dep.c_str());
+                all_deps_ok = false;
+                continue;
+            }
+
+            if (dep_target->type == "shared_lib") {
+                append_spaced(libs_flags, "-L" + dep_target->output_dir);
+                append_spaced(libs_flags, "-l" + dep_target->output_name);
+            }
+        }
+    }
+
+    std::string build_extra_flags(const KasProjectConfig::KasProject &project, const KasProjectConfig::TargetConfig &target) {
+        std::string extra_flags = join_flags(project.toolchain.cxxflags);
+        extra_flags += join_flags(target.cxxflags);
+
+        ensure_flag(extra_flags, "-MMD");
+        ensure_flag(extra_flags, "-MP");
+
+        if (target.type == "shared_lib") {
+            ensure_flag(extra_flags, "-fPIC");
+        }
+
+        return extra_flags;
+    }
+
     int run_compile_target(const KasProjectConfig::KasProject &project, const KasProjectConfig::TargetConfig &target) {
         bool all_deps_ok = true;
         bool needs_relink = false;
@@ -281,26 +405,10 @@ namespace KasBuild {
         std::string libs_flags = "";
         std::string includes = "";
 
-        for (const auto &lib : target.system_libs) {
-            if (!check_system_dependency(lib)) {
-                all_deps_ok = false;
-            }
-            libs += lib + " ";
-        }
+        resolve_target_dependencies(project, target, libs, libs_flags, all_deps_ok);
+
         if (!libs.empty()) {
-            libs_flags = exec_cmd(("pkg-config --libs " + libs).c_str());
-            includes = exec_cmd(("pkg-config --cflags " + libs).c_str());
-        }
-        for (const auto &dep : target.dependencies) {
-            const auto *dep_target = find_target(project, dep);
-            if (!dep_target) {
-                KasLog::log(KasLog::Level::ERR, "Dependency target not found: %s", dep.c_str());
-                all_deps_ok = false;
-            } else {
-                if (dep_target->type == "shared_lib") {
-                    libs_flags += "-L" + dep_target->output_dir + " -l" + dep_target->output_name + " ";
-                }
-            }
+            includes = exec_cmd(make_pkg_config_command("--cflags", libs).c_str());
         }
 
         if (!all_deps_ok) {
@@ -308,33 +416,15 @@ namespace KasBuild {
             return 1;
         }
 
-        std::vector<std::string> sources;
-        for (const auto &src_pattern : target.sources) {
-            std::vector<std::string> src_files = resolve_pattern(src_pattern, "cpp");
-            sources.insert(sources.end(), src_files.begin(), src_files.end());
-        }
+        const std::vector<std::string> sources = gather_sources(target);
         for (const auto &inc_pattern : target.includes) {
-            std::vector<std::string> inc_dirs = resolve_pattern(inc_pattern, "", true);
-            for (const auto &d : inc_dirs) {
-                includes += "-I" + d + " ";
-            }
+            const std::vector<std::string> inc_dirs = resolve_pattern(inc_pattern, "", true);
+            append_include_flags(includes, inc_dirs);
         }
-        std::string extra_flags = "";
-        for (const auto &f : project.toolchain.cxxflags)
-            extra_flags += f + " ";
-        for (const auto &f : target.cxxflags)
-            extra_flags += f + " ";
 
-        if (extra_flags.find("-MMD") == std::string::npos)
-            extra_flags += "-MMD ";
-
-        if (extra_flags.find("-MP ") == std::string::npos)
-            extra_flags += "-MP ";
-
-        if (target.type == "shared_lib" && extra_flags.find("-fPIC") == std::string::npos)
-            extra_flags += "-fPIC ";
-
-        int max_threads = project.toolchain.jobs > 0 ? project.toolchain.jobs : std::thread::hardware_concurrency();
+        const std::string extra_flags = build_extra_flags(project, target);
+        const unsigned int detected_threads = std::thread::hardware_concurrency();
+        const int max_threads = (project.toolchain.jobs > 0) ? project.toolchain.jobs : static_cast<int>(detected_threads == 0 ? 1 : detected_threads);
         Semaphore sem(max_threads);
         std::vector<std::future<int>> tasks;
 
@@ -372,6 +462,7 @@ namespace KasBuild {
         }
         return 0;
     }
+
     bool build_target(const KasProjectConfig::KasProject &project, std::string target_req) {
         std::vector<std::string> build_queue;
         std::set<std::string> visited;
