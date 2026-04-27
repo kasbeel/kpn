@@ -192,3 +192,37 @@ namespace KasBuild {
     }
 
 } // namespace KasBuild
+
+int run_linker(const KasProjectConfig::KasProject &project, const KasProjectConfig::TargetConfig &target, const std::string &objects, const std::string &compiler, const std::string &libs_flags) {
+    if (!std::filesystem::exists(target.output_dir)) {
+        std::filesystem::create_directories(target.output_dir);
+    }
+
+    std::string ld_flags = " ";
+    ld_flags += KasUtils::join_flags(project.toolchain.ldflags);
+    ld_flags += KasUtils::join_flags(target.ldflags);
+
+    std::string output_name = target.output_name;
+    if (target.type == "shared_lib") {
+        output_name = "lib" + target.output_name + target.output_extension + "." + project.version;
+    }
+
+    std::string link_cmd = compiler + ld_flags + objects + " -o " + target.output_dir + "/";
+    if (target.type == "shared_lib") {
+        link_cmd += output_name + " -shared ";
+    } else {
+        link_cmd += output_name + " ";
+    }
+    link_cmd += libs_flags;
+
+    KasLog::log(KasLog::Level::INFO, "Linking %s...", target.name.c_str());
+    KasLog::log(KasLog::Level::DEBUG, "%s", link_cmd.c_str());
+    if (std::system(link_cmd.c_str()) != 0) {
+        KasLog::log(KasLog::Level::ERR, "Linking failed for target: %s", target.name.c_str());
+        return 1;
+    }
+    if (target.type == "shared_lib")
+        update_symlink(output_name, target.output_dir + "/" + "lib" + target.output_name + target.output_extension);
+
+    return 0;
+}

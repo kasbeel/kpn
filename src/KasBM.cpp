@@ -32,7 +32,7 @@ using namespace KasProjectConfig;
 
 void print_help() {
     std::cout << R"(
-KasBuildManagment - Simple C++ Build System
+KasBuildManagment - Simple C++ Build System Managment
 USAGE:
   kasbm <command> [options]
 
